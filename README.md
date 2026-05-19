@@ -195,10 +195,10 @@ A typical config:
 ```json
 {
   "observational-memory": {
-    "observeAfterTokens": 1000,
-    "reflectAfterTokens": 5000,
-    "compactAfterTokens": 50000,
-    "observationsPoolMaxTokens": 30000,
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "compactAfterTokens": 81000,
+    "observationsPoolMaxTokens": 20000,
     "agentMaxTurns": 16,
     "model": {
       "provider": "openrouter",
@@ -217,10 +217,10 @@ Most users can start with the defaults and tune only if they have a specific rea
 
 | Setting                     | Default       | Meaning                                                                                           |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
-| `observeAfterTokens`        | `1000`        | Raw/source token threshold for observation runs.                                                  |
-| `reflectAfterTokens`        | `5000`        | Raw/source token threshold for reflection and memory maintenance.                                 |
-| `compactAfterTokens`        | `50000`       | Raw/source token threshold for proactive auto-compaction.                                         |
-| `observationsPoolMaxTokens` | `30000`       | Visible observation-token pressure that triggers a full memory refresh during compaction.         |
+| `observeAfterTokens`        | `10000`       | Raw/source token threshold for observation runs.                                                  |
+| `reflectAfterTokens`        | `20000`       | Raw/source token threshold for reflection and memory maintenance.                                 |
+| `compactAfterTokens`        | `81000`       | Raw/source token threshold for proactive auto-compaction.                                         |
+| `observationsPoolMaxTokens` | `20000`       | Visible observation-token pressure that triggers a full memory refresh during compaction.         |
 | `agentMaxTurns`             | `16`          | Shared turn cap for background memory-agent loops.                                                |
 | `model`                     | session model | Optional memory-worker model override: `{ provider, id, thinking }`.                              |
 | `passive`                   | `false`       | Disables proactive background observation, reflection, maintenance, and auto-compaction triggers. |
@@ -345,10 +345,10 @@ V3 equivalent:
 ```json
 {
   "observational-memory": {
-    "observeAfterTokens": 1000,
-    "reflectAfterTokens": 5000,
-    "compactAfterTokens": 50000,
-    "observationsPoolMaxTokens": 30000,
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "compactAfterTokens": 81000,
+    "observationsPoolMaxTokens": 20000,
     "agentMaxTurns": 12,
     "model": {
       "provider": "openrouter",

@@ -26,7 +26,7 @@ function setup(args: { entries: TestEntry[]; observationsPoolMaxTokens?: number;
 	};
 	const runtime = {
 		config: {
-			observationsPoolMaxTokens: args.observationsPoolMaxTokens ?? 30_000,
+			observationsPoolMaxTokens: args.observationsPoolMaxTokens ?? 20_000,
 		},
 		compactHookInFlight: args.compactHookInFlight ?? false,
 		observerPromise: new Promise(() => {}),

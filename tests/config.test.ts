@@ -36,10 +36,10 @@ describe("V3 config", () => {
 
 	it("uses V3 defaults", () => {
 		expect(DEFAULTS).toEqual({
-			observeAfterTokens: 1000,
-			reflectAfterTokens: 5000,
-			compactAfterTokens: 50000,
-			observationsPoolMaxTokens: 30000,
+			observeAfterTokens: 10000,
+			reflectAfterTokens: 20000,
+			compactAfterTokens: 81000,
+			observationsPoolMaxTokens: 20000,
 			agentMaxTurns: 16,
 			passive: false,
 			debugLog: false,
@@ -85,7 +85,7 @@ describe("V3 config", () => {
 				observeAfterTokens: -1,
 				reflectAfterTokens: 0,
 				compactAfterTokens: 1.5,
-				observationsPoolMaxTokens: "30000",
+				observationsPoolMaxTokens: "20000",
 				agentMaxTurns: null,
 				model: { provider: "anthropic", id: "", thinking: "huge" },
 				passive: "yes",

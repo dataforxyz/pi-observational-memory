@@ -29,10 +29,10 @@ The extension loads config once for its runtime. After changing settings, restar
 ```json
 {
   "observational-memory": {
-    "observeAfterTokens": 1000,
-    "reflectAfterTokens": 5000,
-    "compactAfterTokens": 50000,
-    "observationsPoolMaxTokens": 30000,
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "compactAfterTokens": 81000,
+    "observationsPoolMaxTokens": 20000,
     "agentMaxTurns": 16,
     "model": {
       "provider": "openrouter",
@@ -51,10 +51,10 @@ You can omit everything. Defaults work for ordinary sessions, and if `model` is 
 
 | Setting | Type | Default | What it controls |
 |---|---:|---:|---|
-| `observeAfterTokens` | positive integer | `1000` | Raw/source token threshold for observer runs. |
-| `reflectAfterTokens` | positive integer | `5000` | Raw/source token threshold for reflector and dropper clocks. |
-| `compactAfterTokens` | positive integer | `50000` | Raw/source token threshold for proactive auto-compaction. |
-| `observationsPoolMaxTokens` | positive integer | `30000` | Visible observation-token pressure that makes compaction do a full fold. |
+| `observeAfterTokens` | positive integer | `10000` | Raw/source token threshold for observer runs. |
+| `reflectAfterTokens` | positive integer | `20000` | Raw/source token threshold for reflector and dropper clocks. |
+| `compactAfterTokens` | positive integer | `81000` | Raw/source token threshold for proactive auto-compaction. |
+| `observationsPoolMaxTokens` | positive integer | `20000` | Visible observation-token pressure that makes compaction do a full fold. |
 | `agentMaxTurns` | positive integer | `16` | Shared nested-agent turn cap for observer, reflector, and dropper. |
 | `model` | object | unset | Optional model override for observer, reflector, and dropper. |
 | `model.provider` | string | unset | Provider name in Pi's model registry. Required when `model` is set. |
@@ -69,7 +69,7 @@ Invalid values are ignored. Positive-integer settings must be finite integers gr
 
 ## `observeAfterTokens`
 
-Default: `1000`.
+Default: `10000`.
 
 The observer runs from Pi's `turn_end` hook. It counts raw/source tokens after the latest `om.observations.recorded.data.coversUpToId` marker. When the count reaches `observeAfterTokens`, the observer receives source entries after that marker and may append a non-empty `om.observations.recorded` ledger entry.
 
@@ -77,7 +77,7 @@ Lower values create smaller chunks and more frequent model calls. Higher values 
 
 ## `reflectAfterTokens`
 
-Default: `5000`.
+Default: `20000`.
 
 The reflector and dropper share the same threshold but keep separate raw-token progress clocks:
 
@@ -90,7 +90,7 @@ Lower values distill/drop more often. Higher values reduce background model call
 
 ## `compactAfterTokens`
 
-Default: `50000`.
+Default: `81000`.
 
 The auto-compaction trigger runs from Pi's `agent_end` hook. It counts raw/source tokens after the latest compaction boundary. If the count reaches `compactAfterTokens`, the extension defers with `setTimeout(0)`, checks that Pi is idle, re-checks the threshold, and calls `ctx.compact()`.
 
@@ -100,7 +100,7 @@ Pi's own window-pressure compaction and manual compaction can still happen indep
 
 ## `observationsPoolMaxTokens`
 
-Default: `30000`.
+Default: `20000`.
 
 This controls V3's full-fold pressure. During compaction, the extension first builds the visible projection. If visible active observations are at or above `observationsPoolMaxTokens`, compaction performs a full fold through the compaction boundary. Otherwise, it keeps reflection/drop effects stable from the latest full fold and projects only observations through the new boundary.
 
