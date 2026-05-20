@@ -15,7 +15,7 @@ V3 is ledger-centered: memory state is reconstructed by folding V3 ledger entrie
 | `agent_end` compaction trigger | Maybe call `ctx.compact()` when idle and over `compactAfterTokens`. |
 | `session_before_compact` hook | Build the V3 compaction payload deterministically. |
 | `/om-status` | Show ledger counts, drift, progress clocks, and worker state. |
-| `/om-view` | Show visible or full memory content and copy rendered memory text when supported. |
+| `/om-view` | Show visible or full memory content and attempt to copy the rendered memory text. |
 | `recall` tool | Recover source evidence for a memory id. |
 
 ## Lifecycle overview
@@ -247,7 +247,7 @@ Visible projection without a boundary reads the latest V3 `om.folded` compaction
 
 ### Compaction projection
 
-When compaction runs, the projection helper decides whether this compaction is a full fold. It sums visible active observation `tokenCount`; if that total is at or above `observationsPoolMaxTokens`, it performs a full fold through `firstKeptEntryId`. Otherwise, it projects new observations while keeping reflection/drop effects stable from the latest full fold.
+When compaction runs, the projection helper decides whether this compaction is a full fold. It first builds the normal compaction projection: observations folded through `firstKeptEntryId`, with reflection/drop effects held stable from the latest full-fold boundary. It sums that projection's active observation `tokenCount`; if the total is at or above `observationsPoolMaxTokens`, it performs a full fold through `firstKeptEntryId`. Otherwise, it keeps the normal projection.
 
 ### Diff projection
 
@@ -255,10 +255,17 @@ Diff projection compares visible memory with full memory. `/om-status` uses this
 
 ## Summary rendering
 
-The renderer returns an empty string when there are no visible observations or reflections. Otherwise it renders:
+The renderer returns an empty string when there are no visible observations or reflections. Otherwise it starts with deterministic usage instructions that tell the agent how to treat the memory, how to handle conflicts, and when to use `recall` for exact source context. It then renders reflection and observation sections when those entries exist:
 
 ```md
 These are condensed memories from earlier in this session.
+
+- Reflections: stable, long-lived facts about the user, project, decisions, and constraints. New reflection lines may include ids in brackets.
+- Observations: timestamped events from the conversation history, in chronological order. Observation lines include ids in brackets.
+
+Treat these as past records. When entries conflict, the most recent observation reflects the latest known state. Work that prior observations describe as completed should not be redone unless the user explicitly asks to revisit it.
+
+When exact source context is needed for precision or traceability, use the recall tool with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently. Do not use recall as broad search or inject raw source unless it is needed.
 
 ## Reflections
 [id] durable reflection
@@ -275,23 +282,24 @@ The renderer is deterministic. It does not call a model and does not rewrite mem
 
 Shows:
 
-- active/dropped observation counts;
-- reflection count;
-- visible projection size;
-- visible-vs-full drift;
+- recorded/dropped/visible observation counts, with plain `+N` / `-N` visible-vs-full drift suffixes when drift exists;
+- recorded/visible reflection counts, with a plain `+N` drift suffix when full memory has extra reflections;
 - next observation/reflection/drop/compaction token progress;
-- full-fold pool pressure;
+- observation pool pressure against `observationsPoolMaxTokens`;
+- reflection pool token total;
 - passive mode;
 - worker in-flight flags;
 - last observer and reflect/drop errors.
 
 ### `/om-view`
 
-Default mode shows visible memory and copies the rendered memory text to the clipboard when supported by the host environment.
+Default mode shows visible memory and attempts to copy the rendered memory text to the clipboard. If no V3 compaction has happened yet, visible memory can be empty because nothing has been folded into `om.folded` details; use `/om-view full` to inspect recorded branch memory before the first compaction.
+
+Clipboard copy uses platform clipboard commands (`pbcopy`, `clip`, `wl-copy`, `xclip`, `xsel`, or `termux-clipboard-set`). If copying succeeds, Pi shows `Copied /om-view output to clipboard.` If copying fails, the command still prints the memory view and shows a warning. The clipboard text is only the rendered memory content; it does not include the success/failure line.
 
 ### `/om-view full`
 
-Shows full V3 ledger truth at branch tip and copies the rendered memory text to the clipboard when supported by the host environment.
+Shows full V3 ledger truth at branch tip and attempts to copy the rendered memory text to the clipboard using the same success/failure behavior as default `/om-view`.
 
 ## Recall flow
 

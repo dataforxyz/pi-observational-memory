@@ -131,6 +131,13 @@ At compaction time, Pi may receive memory like this:
 ```md
 These are condensed memories from earlier in this session.
 
+- Reflections: stable, long-lived facts about the user, project, decisions, and constraints. New reflection lines may include ids in brackets.
+- Observations: timestamped events from the conversation history, in chronological order. Observation lines include ids in brackets.
+
+Treat these as past records. When entries conflict, the most recent observation reflects the latest known state. Work that prior observations describe as completed should not be redone unless the user explicitly asks to revisit it.
+
+When exact source context is needed for precision or traceability, use the recall tool with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently. Do not use recall as broad search or inject raw source unless it is needed.
+
 ## Reflections
 [a1b2c3d4e5f6] User works at Acme Corp building Acme Dashboard on Next.js 15 with Supabase auth.
 [b2c3d4e5f6a1] Hard constraint: ship by January 22nd 2026.
@@ -223,7 +230,7 @@ Most users can start with the defaults and tune only if they have a specific rea
 | `observeAfterTokens`        | `10000`       | Raw/source token threshold for observation runs.                                                  |
 | `reflectAfterTokens`        | `20000`       | Raw/source token threshold for reflection and memory maintenance.                                 |
 | `compactAfterTokens`        | `81000`       | Raw/source token threshold for proactive auto-compaction.                                         |
-| `observationsPoolMaxTokens` | `20000`       | Visible observation-token pressure that triggers a full memory refresh during compaction.         |
+| `observationsPoolMaxTokens` | `20000`       | Normal compaction-projection observation-token pressure that triggers a full memory refresh.      |
 | `agentMaxTurns`             | `16`          | Shared turn cap for background memory-agent loops.                                                |
 | `model`                     | session model | Optional memory-worker model override: `{ provider, id, thinking }`.                              |
 | `passive`                   | `false`       | Disables proactive background observation, reflection, maintenance, and auto-compaction triggers. |
@@ -248,10 +255,12 @@ For details and tuning guidance, see [`docs/configuration.md`](docs/configuratio
 
 | Surface             | What it does                                                                                                                                    |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/om-status`        | Shows memory counts, visible/full drift, progress clocks, memory pressure, passive/in-flight state, and last worker errors.                     |
-| `/om-view`          | Shows current visible memory and copies it to the clipboard when supported by the host environment.                                             |
-| `/om-view full`     | Shows the full current memory state for the branch and copies it to the clipboard when supported by the host environment.                       |
+| `/om-status`        | Shows memory counts, plain `+N` / `-N` visible/full drift suffixes, progress clocks, memory pressure, passive/in-flight state, and last worker errors. |
+| `/om-view`          | Shows current visible memory and attempts to copy the rendered memory text to the clipboard.                                                   |
+| `/om-view full`     | Shows the full current memory state for the branch and attempts to copy the rendered memory text to the clipboard.                             |
 | `recall` agent tool | Recovers source evidence for a 12-character observation/reflection id on the current branch. It is not semantic search or a transcript browser. |
+
+`/om-view` copies only the rendered memory content. The success/failure line shown in Pi is not included in the clipboard text. If clipboard support is unavailable, the command still prints the memory view and shows a warning. Before the first V3 compaction, visible memory can be empty because nothing has been folded into `om.folded` details; use `/om-view full` to inspect recorded branch memory.
 
 ---
 
@@ -314,7 +323,7 @@ What this means in practice:
 | ---------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `observationThresholdTokens` | `observeAfterTokens`                                    | Rename. Same rough role: observation cadence based on raw/source tokens.                                                                       |
 | `compactionThresholdTokens`  | `compactAfterTokens`                                    | Rename. Same rough role: proactive compaction cadence.                                                                                         |
-| `reflectionThresholdTokens`  | `reflectAfterTokens` and/or `observationsPoolMaxTokens` | Split. Use `reflectAfterTokens` for reflection scheduling. Use `observationsPoolMaxTokens` for visible observation-pool/full-refresh pressure. |
+| `reflectionThresholdTokens`  | `reflectAfterTokens` and/or `observationsPoolMaxTokens` | Split. Use `reflectAfterTokens` for reflection scheduling. Use `observationsPoolMaxTokens` for compaction full-fold pressure. |
 | `compactionModel`            | `model`                                                 | Move `{ provider, id }` to `model`.                                                                                                            |
 | `thinkingLevel`              | `model.thinking`                                        | Move under `model`.                                                                                                                            |
 | `observerMaxTurnsPerRun`     | `agentMaxTurns`                                         | Replace with the shared memory-agent turn cap.                                                                                                 |

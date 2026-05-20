@@ -54,7 +54,7 @@ You can omit everything. Defaults work for ordinary sessions, and if `model` is 
 | `observeAfterTokens` | positive integer | `10000` | Raw/source token threshold for observer runs. |
 | `reflectAfterTokens` | positive integer | `20000` | Raw/source token threshold for reflector and dropper clocks. |
 | `compactAfterTokens` | positive integer | `81000` | Raw/source token threshold for proactive auto-compaction. |
-| `observationsPoolMaxTokens` | positive integer | `20000` | Visible observation-token pressure that makes compaction do a full fold. |
+| `observationsPoolMaxTokens` | positive integer | `20000` | Normal compaction-projection observation-token pressure that makes compaction do a full fold. |
 | `agentMaxTurns` | positive integer | `16` | Shared nested-agent turn cap for observer, reflector, and dropper. |
 | `model` | object | unset | Optional model override for observer, reflector, and dropper. |
 | `model.provider` | string | unset | Provider name in Pi's model registry. Required when `model` is set. |
@@ -102,7 +102,7 @@ Pi's own window-pressure compaction and manual compaction can still happen indep
 
 Default: `20000`.
 
-This controls V3's full-fold pressure. During compaction, the extension first builds the visible projection. If visible active observations are at or above `observationsPoolMaxTokens`, compaction performs a full fold through the compaction boundary. Otherwise, it keeps reflection/drop effects stable from the latest full fold and projects only observations through the new boundary.
+This controls V3's full-fold pressure. During compaction, the extension first builds the normal compaction projection: observations folded through the compaction boundary, with reflection/drop effects held stable from the latest full fold. If that projection's active observation tokens are at or above `observationsPoolMaxTokens`, compaction performs a full fold through the compaction boundary. Otherwise, it keeps reflection/drop effects stable from the latest full fold and projects only observations through the new boundary.
 
 This is not a scheduling threshold for the reflector. Use `reflectAfterTokens` for reflector/dropper cadence.
 
@@ -168,7 +168,7 @@ V3 is not backwards compatible with V2 settings. Old keys are silently ignored a
 |---|---|---|
 | `observationThresholdTokens` | `observeAfterTokens` | Rename. Same rough observer-cadence role. |
 | `compactionThresholdTokens` | `compactAfterTokens` | Rename. Same rough proactive-compaction role. |
-| `reflectionThresholdTokens` | `reflectAfterTokens` and/or `observationsPoolMaxTokens` | Split. Use `reflectAfterTokens` for reflector/dropper cadence; use `observationsPoolMaxTokens` for visible observation pool pressure. |
+| `reflectionThresholdTokens` | `reflectAfterTokens` and/or `observationsPoolMaxTokens` | Split. Use `reflectAfterTokens` for reflector/dropper cadence; use `observationsPoolMaxTokens` for compaction full-fold pressure. |
 | `compactionModel` | `model` | Move `{ provider, id }` under `model`. |
 | `thinkingLevel` | `model.thinking` | Move under `model`. |
 | `observerMaxTurnsPerRun` | `agentMaxTurns` | Replace with one shared cap. |
@@ -187,15 +187,15 @@ Old V2 memory entries and old V2 compaction details are ignored by V3. Start a n
 ```json
 {
   "observational-memory": {
-    "observeAfterTokens": 2000,
-    "reflectAfterTokens": 10000,
+    "observeAfterTokens": 20000,
+    "reflectAfterTokens": 50000,
     "agentMaxTurns": 8,
     "model": { "provider": "openrouter", "id": "a-cheaper-model", "thinking": "off" }
   }
 }
 ```
 
-Tradeoff: coarser observations and less frequent reflection/drop cleanup.
+Tradeoff: fewer background model calls, but memory updates lag longer, observation chunks are larger, and reflection/drop cleanup happens less often.
 
 ### More responsive memory
 
