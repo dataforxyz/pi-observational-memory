@@ -19,6 +19,22 @@ interface RunDropperArgs {
 	thinkingLevel?: ModelThinkingLevel;
 }
 
+const DROP_SKIP_FULLNESS = 0.10;
+const DROP_LOW_URGENCY_FULLNESS = 0.30;
+const DROP_MEDIUM_URGENCY_FULLNESS = 0.60;
+const DROP_MAX_FULLNESS = 1.00;
+const DROP_MIN_RATIO = 0.10;
+const DROP_MAX_RATIO = 0.50;
+
+export type DropUrgency = "low" | "medium" | "high";
+
+const RELEVANCE_DROP_RANK: Record<Observation["relevance"], number> = {
+	low: 0,
+	medium: 1,
+	high: 2,
+	critical: 3,
+};
+
 const DropObservationsSchema = Type.Object({
 	ids: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
 	reason: Type.Optional(Type.String()),
@@ -28,6 +44,32 @@ type DropObservationsArgs = Static<typeof DropObservationsSchema>;
 
 function joinOrEmpty(items: string[]): string {
 	return items.length ? items.join("\n") : "(none yet)";
+}
+
+export function observationPoolFullness(observationTokens: number, budgetTokens: number): number {
+	if (!Number.isFinite(observationTokens) || observationTokens <= 0) return 0;
+	if (!Number.isFinite(budgetTokens) || budgetTokens <= 0) return 0;
+	return observationTokens / budgetTokens;
+}
+
+export function dropUrgencyForFullness(fullness: number): DropUrgency {
+	if (fullness < DROP_LOW_URGENCY_FULLNESS) return "low";
+	if (fullness < DROP_MEDIUM_URGENCY_FULLNESS) return "medium";
+	return "high";
+}
+
+export function maxDropCountForPool(observations: readonly Observation[], observationTokens: number, budgetTokens: number): number {
+	const droppableCount = observations.filter((observation) => observation.relevance !== "critical").length;
+	if (droppableCount === 0) return 0;
+
+	const fullness = observationPoolFullness(observationTokens, budgetTokens);
+	if (fullness < DROP_SKIP_FULLNESS) return 0;
+
+	const cappedFullness = Math.min(DROP_MAX_FULLNESS, Math.max(DROP_SKIP_FULLNESS, fullness));
+	const dropRatio = DROP_MIN_RATIO
+		+ ((cappedFullness - DROP_SKIP_FULLNESS) / (DROP_MAX_FULLNESS - DROP_SKIP_FULLNESS))
+		* (DROP_MAX_RATIO - DROP_MIN_RATIO);
+	return Math.max(1, Math.floor(droppableCount * dropRatio));
 }
 
 export function normalizeDropObservationIds(
@@ -49,35 +91,69 @@ export function normalizeDropObservationIds(
 	return result.length > 0 ? result : undefined;
 }
 
+export function selectDropCandidates(
+	ids: readonly string[],
+	observations: readonly Observation[],
+	maxDrops: number,
+): string[] {
+	if (maxDrops <= 0 || ids.length === 0) return [];
+
+	const byId = new Map(observations.map((observation) => [observation.id, observation]));
+	const firstProposalIndex = new Map<string, number>();
+	for (let i = 0; i < ids.length; i++) {
+		const id = ids[i];
+		if (!firstProposalIndex.has(id)) firstProposalIndex.set(id, i);
+	}
+
+	return Array.from(firstProposalIndex.entries())
+		.map(([id, index]) => ({ id, index, observation: byId.get(id) }))
+		.filter((candidate): candidate is { id: string; index: number; observation: Observation } =>
+			candidate.observation !== undefined && candidate.observation.relevance !== "critical"
+		)
+		.sort((a, b) => {
+			const relevanceDelta = RELEVANCE_DROP_RANK[a.observation.relevance] - RELEVANCE_DROP_RANK[b.observation.relevance];
+			return relevanceDelta || a.index - b.index;
+		})
+		.slice(0, maxDrops)
+		.map((candidate) => candidate.id);
+}
+
 export async function runDropper(args: RunDropperArgs): Promise<string[] | undefined> {
 	const { model, apiKey, headers, reflections, observations, budgetTokens, signal } = args;
 	if (observations.length === 0) return undefined;
-	const droppedIds: string[] = [];
-	const dropped = new Set<string>();
+
+	const observationTokens = observations.reduce((sum, observation) => sum + observation.tokenCount, 0);
+	const fullness = observationPoolFullness(observationTokens, budgetTokens);
+	const urgency = dropUrgencyForFullness(fullness);
+	const maxDropsAllowed = maxDropCountForPool(observations, observationTokens, budgetTokens);
+	if (maxDropsAllowed <= 0) return undefined;
+
+	const proposedDropIds: string[] = [];
+	const proposed = new Set<string>();
 
 	const dropObservations: AgentTool<typeof DropObservationsSchema> = {
 		name: "drop_observations",
 		label: "Drop observations",
-		description: "Drop active observation ids that are safe to remove from compacted memory.",
+		description: "Propose active observation ids that are safe to remove from compacted memory.",
 		parameters: DropObservationsSchema,
 		execute: async (_id, params: DropObservationsArgs) => {
 			const normalized = normalizeDropObservationIds(params.ids, observations) ?? [];
 			let added = 0;
 			for (const id of normalized) {
-				if (dropped.has(id)) continue;
-				dropped.add(id);
-				droppedIds.push(id);
+				if (proposed.has(id)) continue;
+				proposed.add(id);
+				proposedDropIds.push(id);
 				added++;
 			}
 			return {
-				content: [{ type: "text", text: `Dropped ${added} observation${added === 1 ? "" : "s"}. Total this run: ${droppedIds.length}.` }],
-				details: { added, total: droppedIds.length },
+				content: [{ type: "text", text: `Queued ${added} drop candidate${added === 1 ? "" : "s"}. Candidates this run: ${proposedDropIds.length}. Maximum drops allowed: ${maxDropsAllowed}.` }],
+				details: { added, totalCandidates: proposedDropIds.length, maxDropsAllowed },
 			};
 		},
 	};
 
-	const observationTokens = observations.reduce((sum, observation) => sum + observation.tokenCount, 0);
-	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map(observationToSummaryLine))}\n\nObservation pool pressure: ~${observationTokens.toLocaleString()} tokens; target budget: ~${budgetTokens.toLocaleString()} tokens. Drop only observations that are safe to remove. If none are safe, do not call the tool.`;
+	const fullnessPercent = Math.round(fullness * 100);
+	const userText = `CURRENT REFLECTIONS:\n${joinOrEmpty(reflections.map(reflectionToSummaryLine))}\n\nCURRENT OBSERVATIONS:\n${joinOrEmpty(observations.map(observationToSummaryLine))}\n\nObservation pool pressure: ~${observationTokens.toLocaleString()} tokens; target budget: ~${budgetTokens.toLocaleString()} tokens; fullness: ~${fullnessPercent.toLocaleString()}%.\nDrop urgency: ${urgency}.\nMaximum drops allowed this run: ${maxDropsAllowed.toLocaleString()} observation${maxDropsAllowed === 1 ? "" : "s"}.\nThis maximum is a hard upper bound, not a target. Drop fewer or none if fewer observations are clearly safe.`;
 	const prompts: Message[] = [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }];
 	const context: AgentContext = { systemPrompt: DROPPER_SYSTEM, messages: [], tools: [dropObservations as AgentTool<any>] };
 	const reasoning = (model as { reasoning?: unknown }).reasoning;
@@ -98,8 +174,9 @@ export async function runDropper(args: RunDropperArgs): Promise<string[] | undef
 	const loop = args.agentLoop ?? agentLoop;
 	const stream = loop(prompts, context, config, signal);
 	for await (const _event of stream) {
-		// Tool execution collects ids.
+		// Tool execution collects candidate ids.
 	}
 	await stream.result();
+	const droppedIds = selectDropCandidates(proposedDropIds, observations, maxDropsAllowed);
 	return droppedIds.length > 0 ? droppedIds : undefined;
 }
