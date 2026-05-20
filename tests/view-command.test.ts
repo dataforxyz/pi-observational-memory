@@ -15,7 +15,10 @@ import {
 	type TestEntry,
 } from "./fixtures/session.js";
 
-function setup(entries: TestEntry[]) {
+const COPY_SUCCESS = "Copied /om-view output to clipboard.";
+const COPY_FAILURE = "Warning: failed to copy /om-view output to clipboard.";
+
+function setup(entries: TestEntry[], clipboardResult = true) {
 	let handler: ((args: unknown, ctx: any) => Promise<void>) | undefined;
 	const pi = {
 		registerCommand: vi.fn((name: string, command: { handler: typeof handler }) => {
@@ -24,15 +27,20 @@ function setup(entries: TestEntry[]) {
 		}),
 	};
 	const runtime = { ensureConfig: vi.fn() };
-	registerViewCommand(pi as any, runtime as any);
+	const copyToClipboard = vi.fn(async () => clipboardResult);
+	registerViewCommand(pi as any, runtime as any, { copyToClipboard });
 	if (!handler) throw new Error("view handler not registered");
 	const notify = vi.fn();
 	const ctx = { cwd: "/tmp/project", ui: { notify }, sessionManager: { getBranch: () => entries } };
 	const run = async (args: unknown = []) => {
 		await handler!(args, ctx);
-		return notify.mock.calls.at(-1)?.[0] as string;
+		return {
+			output: notify.mock.calls.at(-1)?.[0] as string,
+			clipboardText: copyToClipboard.mock.calls.at(-1)?.[0] as string | undefined,
+			copyToClipboard,
+		};
 	};
-	return { run, notify };
+	return { run, notify, copyToClipboard };
 }
 
 function expectNoDiagnostics(output: string) {
@@ -49,22 +57,25 @@ function expectNoDiagnostics(output: string) {
 }
 
 describe("V3 /om-view", () => {
-	it("renders no-memory visible output as content-only sections", async () => {
-		const output = await setup([]).run();
-
-		expect(output).toBe([
+	it("renders no-memory visible output as content-only sections and copies it", async () => {
+		const { output, clipboardText, copyToClipboard } = await setup([]).run();
+		const expected = [
 			"── Reflections ──",
 			"No visible reflections.",
 			"",
 			"── Observations ──",
 			"No visible observations.",
-		].join("\n"));
+		].join("\n");
+
+		expect(copyToClipboard).toHaveBeenCalledTimes(1);
+		expect(clipboardText).toBe(expected);
+		expect(output).toBe(`${expected}\n\n${COPY_SUCCESS}`);
 		expect(output).not.toContain("committed");
 		expect(output).not.toContain("pending");
 		expectNoDiagnostics(output);
 	});
 
-	it("default view renders latest visible om.folded memory content only", async () => {
+	it("default view renders latest visible om.folded memory content only and copies clean output", async () => {
 		const obs = observation("aaaaaaaaaaaa");
 		const ref = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
 		const entries = [
@@ -73,17 +84,20 @@ describe("V3 /om-view", () => {
 			compactionEntry("cmp", { firstKeptEntryId: "raw-1", details: memoryDetails({ observations: [obs], reflections: [ref] }) }),
 		];
 
-		const output = await setup(entries).run();
+		const { output, clipboardText, copyToClipboard } = await setup(entries).run();
 
-		expect(output).toContain("── Reflections ──");
-		expect(output).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
-		expect(output).toContain("── Observations ──");
-		expect(output).toContain("[aaaaaaaaaaaa]");
-		expect(output).not.toContain("bbbbbbbbbbbb");
+		expect(copyToClipboard).toHaveBeenCalledTimes(1);
+		expect(clipboardText).toContain("── Reflections ──");
+		expect(clipboardText).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
+		expect(clipboardText).toContain("── Observations ──");
+		expect(clipboardText).toContain("[aaaaaaaaaaaa]");
+		expect(clipboardText).not.toContain("bbbbbbbbbbbb");
+		expect(clipboardText).not.toContain(COPY_SUCCESS);
+		expect(output).toBe(`${clipboardText}\n\n${COPY_SUCCESS}`);
 		expectNoDiagnostics(output);
 	});
 
-	it("full view folds recorded V3 memory and excludes dropped observations", async () => {
+	it("full view folds recorded V3 memory, excludes dropped observations, and copies clean output", async () => {
 		const obsA = observation("aaaaaaaaaaaa", { content: "Dropped observation content" });
 		const obsB = observation("bbbbbbbbbbbb", { content: "Kept observation content" });
 		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"]);
@@ -96,50 +110,58 @@ describe("V3 /om-view", () => {
 			observationsDroppedEntry("om-drop", { observationIds: ["aaaaaaaaaaaa"], coversUpToId: "om-ref" }),
 		];
 
-		const output = await setup(entries).run(["full"]);
+		const { output, clipboardText, copyToClipboard } = await setup(entries).run(["full"]);
 
-		expect(output).toContain("── Reflections ──");
-		expect(output).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
-		expect(output).toContain("── Observations ──");
-		expect(output).toContain("[bbbbbbbbbbbb]");
-		expect(output).toContain("Kept observation content");
-		expect(output).not.toContain("[aaaaaaaaaaaa]");
-		expect(output).not.toContain("Dropped observation content");
-		expect(output).not.toContain("v2-obs");
-		expect(output).not.toContain("observational-memory");
+		expect(copyToClipboard).toHaveBeenCalledTimes(1);
+		expect(clipboardText).toContain("── Reflections ──");
+		expect(clipboardText).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
+		expect(clipboardText).toContain("── Observations ──");
+		expect(clipboardText).toContain("[bbbbbbbbbbbb]");
+		expect(clipboardText).toContain("Kept observation content");
+		expect(clipboardText).not.toContain("[aaaaaaaaaaaa]");
+		expect(clipboardText).not.toContain("Dropped observation content");
+		expect(clipboardText).not.toContain("v2-obs");
+		expect(clipboardText).not.toContain("observational-memory");
+		expect(output).toBe(`${clipboardText}\n\n${COPY_SUCCESS}`);
 		expectNoDiagnostics(output);
 	});
 
-	it("full view renders recorded empty states when ledger has no active memory", async () => {
-		const output = await setup([]).run(["full"]);
-
-		expect(output).toBe([
+	it("full view renders recorded empty states and copies them", async () => {
+		const { output, clipboardText } = await setup([]).run(["full"]);
+		const expected = [
 			"── Reflections ──",
 			"No recorded reflections.",
 			"",
 			"── Observations ──",
 			"No recorded observations.",
-		].join("\n"));
+		].join("\n");
+
+		expect(clipboardText).toBe(expected);
+		expect(output).toBe(`${expected}\n\n${COPY_SUCCESS}`);
 		expectNoDiagnostics(output);
 	});
 
-	it("diff view directs diagnostics to /om-status instead of rendering diff lists", async () => {
-		const obsA = observation("aaaaaaaaaaaa");
-		const obsB = observation("bbbbbbbbbbbb");
-		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"]);
-		const entries = [
-			textCustomMessage("raw-1", "aaaa"),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-1", details: memoryDetails({ observations: [obsA], reflections: [] }) }),
-			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "om-obs" }),
-		];
+	it("keeps rendering the memory view when clipboard copy fails", async () => {
+		const { output, clipboardText, copyToClipboard } = await setup([], false).run();
+		const expected = [
+			"── Reflections ──",
+			"No visible reflections.",
+			"",
+			"── Observations ──",
+			"No visible observations.",
+		].join("\n");
 
-		const output = await setup(entries).run(["diff"]);
+		expect(copyToClipboard).toHaveBeenCalledTimes(1);
+		expect(clipboardText).toBe(expected);
+		expect(clipboardText).not.toContain("failed to copy");
+		expect(output).toBe(`${expected}\n\n${COPY_FAILURE}`);
+	});
 
-		expect(output).toBe("Use /om-status to see recorded-vs-visible drift.");
-		expect(output).not.toContain("Observations only in full");
-		expect(output).not.toContain("Reflections only in full");
-		expect(output).not.toContain("[bbbbbbbbbbbb]");
-		expect(output).not.toContain("[eeeeeeeeeeee]");
+	it("rejects unsupported view arguments without copying", async () => {
+		const { output, clipboardText, copyToClipboard } = await setup([]).run(["diff"]);
+
+		expect(copyToClipboard).not.toHaveBeenCalled();
+		expect(clipboardText).toBeUndefined();
+		expect(output).toBe("Usage: /om-view [full]");
 	});
 });

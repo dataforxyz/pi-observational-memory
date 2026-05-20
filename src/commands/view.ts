@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Runtime } from "../runtime.js";
+import { copyTextToClipboard } from "../clipboard.js";
 import {
 	fullProjection,
 	observationToSummaryLine,
@@ -33,25 +34,41 @@ function renderContentOnlyProjection(projection: Projection, emptyScope: "visibl
 	].join("\n");
 }
 
-export function registerViewCommand(pi: ExtensionAPI, runtime: Runtime): void {
+interface ViewCommandOptions {
+	copyToClipboard?: (text: string) => Promise<boolean>;
+}
+
+export function registerViewCommand(pi: ExtensionAPI, runtime: Runtime, options: ViewCommandOptions = {}): void {
+	const copyToClipboard = options.copyToClipboard ?? copyTextToClipboard;
+
 	pi.registerCommand("om-view", {
-		description: "Print observational memory content (visible by default, full for recorded memory)",
+		description: "Print and copy observational memory content (visible by default, full for recorded memory)",
 		handler: async (args, ctx) => {
 			runtime.ensureConfig(ctx.cwd);
 			const entries = ctx.sessionManager.getBranch() as Entry[];
-			const mode = firstArg(args) ?? "visible";
+			const mode = firstArg(args);
+
+			const notifyWithCopy = async (output: string) => {
+				const copied = await copyToClipboard(output).catch(() => false);
+				ctx.ui.notify(
+					copied
+						? `${output}\n\nCopied /om-view output to clipboard.`
+						: `${output}\n\nWarning: failed to copy /om-view output to clipboard.`,
+					"info",
+				);
+			};
 
 			if (mode === "full") {
-				ctx.ui.notify(renderContentOnlyProjection(fullProjection(entries), "recorded"), "info");
+				await notifyWithCopy(renderContentOnlyProjection(fullProjection(entries), "recorded"));
 				return;
 			}
 
-			if (mode === "diff") {
-				ctx.ui.notify("Use /om-status to see recorded-vs-visible drift.", "info");
+			if (mode && mode !== "visible") {
+				ctx.ui.notify("Usage: /om-view [full]", "info");
 				return;
 			}
 
-			ctx.ui.notify(renderContentOnlyProjection(visibleProjection(entries), "visible"), "info");
+			await notifyWithCopy(renderContentOnlyProjection(visibleProjection(entries), "visible"));
 		},
 	});
 }

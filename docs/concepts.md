@@ -144,13 +144,13 @@ Source provenance lives on `Observation.sourceEntryIds` and `Reflection.supporti
 
 Progress counting uses raw/source tokens after the marker. Raw/source entries are `message`, `custom_message`, and `branch_summary` entries; memory ledger entries and compaction entries do not add raw-token progress.
 
-## Visible, full, and diff
+## Visible, full, and drift
 
-V3 distinguishes three projections:
+V3 distinguishes visible memory, full memory, and the drift between them:
 
 - **Visible memory** — what the latest `om.folded` compaction details made visible to the agent. This is what `/om-view` shows by default.
 - **Full memory** — full V3 ledger truth folded at the branch tip. This is what `/om-view full` shows.
-- **Diff** — visible-vs-full drift. This is what `/om-view diff` shows.
+- **Drift** — the difference between visible and full memory. Use `/om-status` to inspect visible-vs-full drift.
 
 Visible and full memory can differ intentionally. Background ledger work may happen after the latest compaction, and normal compactions may avoid re-folding reflection/drop effects until full-fold pressure requires it.
 

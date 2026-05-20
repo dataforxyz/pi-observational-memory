@@ -15,7 +15,7 @@ V3 is ledger-centered: memory state is reconstructed by folding V3 ledger entrie
 | `agent_end` compaction trigger | Maybe call `ctx.compact()` when idle and over `compactAfterTokens`. |
 | `session_before_compact` hook | Build the V3 compaction payload deterministically. |
 | `/om-status` | Show ledger counts, drift, progress clocks, and worker state. |
-| `/om-view` | Show visible/full/diff memory projections. |
+| `/om-view` | Show visible or full memory content and copy rendered memory text when supported. |
 | `recall` tool | Recover source evidence for a memory id. |
 
 ## Lifecycle overview
@@ -251,7 +251,7 @@ When compaction runs, the projection helper decides whether this compaction is a
 
 ### Diff projection
 
-Diff projection compares visible memory with full memory. `/om-view diff` uses this to show drift.
+Diff projection compares visible memory with full memory. `/om-status` uses this to show recorded-vs-visible drift.
 
 ## Summary rendering
 
@@ -287,15 +287,11 @@ Shows:
 
 ### `/om-view`
 
-Default mode shows visible memory.
+Default mode shows visible memory and copies the rendered memory text to the clipboard when supported by the host environment.
 
 ### `/om-view full`
 
-Shows full V3 ledger truth at branch tip.
-
-### `/om-view diff`
-
-Shows visible-vs-full drift.
+Shows full V3 ledger truth at branch tip and copies the rendered memory text to the clipboard when supported by the host environment.
 
 ## Recall flow
 

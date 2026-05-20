@@ -249,9 +249,8 @@ For details and tuning guidance, see [`docs/configuration.md`](docs/configuratio
 | Surface             | What it does                                                                                                                                    |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/om-status`        | Shows memory counts, visible/full drift, progress clocks, memory pressure, passive/in-flight state, and last worker errors.                     |
-| `/om-view`          | Shows current visible memory: what the latest compaction made available to the agent.                                                           |
-| `/om-view full`     | Shows the full current memory state for the branch.                                                                                             |
-| `/om-view diff`     | Shows drift between visible memory and full memory.                                                                                             |
+| `/om-view`          | Shows current visible memory and copies it to the clipboard when supported by the host environment.                                             |
+| `/om-view full`     | Shows the full current memory state for the branch and copies it to the clipboard when supported by the host environment.                       |
 | `recall` agent tool | Recovers source evidence for a 12-character observation/reflection id on the current branch. It is not semantic search or a transcript browser. |
 
 ---
@@ -294,7 +293,7 @@ Current behavior:
 * **Fast compaction.** `session_before_compact` does not call a model or wait for background workers. It renders the current prepared memory state.
 * **Background memory work.** Observation and reflection work run from `turn_end` when their token clocks are due.
 * **Source-backed recall.** Observations and reflections can be traced back through the `recall` tool.
-* **Visible/full/diff views.** `/om-view` shows visible memory, `/om-view full` shows the full current memory state, and `/om-view diff` shows visible-vs-full drift.
+* **Visible/full views.** `/om-view` shows visible memory and `/om-view full` shows the full current memory state. Use `/om-status` for visible-vs-full drift.
 * **No V2 compatibility layer.** Old V2 settings and memory entries are ignored rather than migrated.
 
 ---
