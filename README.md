@@ -1,6 +1,9 @@
 > [!IMPORTANT]
 > **V3 update notice:** this extension now uses the new V3 memory model. If you used V2, update your `observational-memory` settings before running this version. V3 does **not** read the old V2 settings or memory format, and you should start a new clean Pi session after upgrading. See [Migrating from V2](#migrating-from-v2).
 
+> [!NOTE]
+> The `master` branch is the active development branch and may include unreleased or unstable changes. For stable versions, install the published npm package with `pi install npm:pi-observational-memory`.
+
 # pi-observational-memory
 
 > **Make Pi sessions feel endless.**

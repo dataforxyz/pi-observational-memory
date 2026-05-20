@@ -35,19 +35,36 @@ function setup(entries: TestEntry[]) {
 	return { run, notify };
 }
 
+function expectNoDiagnostics(output: string) {
+	expect(output).not.toContain("Memory view:");
+	expect(output).not.toContain("Memory diff:");
+	expect(output).not.toContain("recorded / ");
+	expect(output).not.toContain("dropped");
+	expect(output).not.toContain(" visible +");
+	expect(output).not.toContain("tokens");
+	expect(output).not.toContain("Observation pool");
+	expect(output).not.toContain("Reflection pool");
+	expect(output).not.toContain("Full fold pool");
+	expect(output).not.toContain("only in full");
+}
+
 describe("V3 /om-view", () => {
-	it("renders no-memory visible output without V2 committed/pending language", async () => {
+	it("renders no-memory visible output as content-only sections", async () => {
 		const output = await setup([]).run();
 
-		expect(output).toContain("Memory view: visible");
-		expect(output).toContain("0 reflections · 0 observations");
-		expect(output).toContain("── Reflections (0");
-		expect(output).toContain("── Observations (0");
+		expect(output).toBe([
+			"── Reflections ──",
+			"No visible reflections.",
+			"",
+			"── Observations ──",
+			"No visible observations.",
+		].join("\n"));
 		expect(output).not.toContain("committed");
 		expect(output).not.toContain("pending");
+		expectNoDiagnostics(output);
 	});
 
-	it("default view renders latest visible om.folded memory", async () => {
+	it("default view renders latest visible om.folded memory content only", async () => {
 		const obs = observation("aaaaaaaaaaaa");
 		const ref = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
 		const entries = [
@@ -58,15 +75,17 @@ describe("V3 /om-view", () => {
 
 		const output = await setup(entries).run();
 
-		expect(output).toContain("Memory view: visible");
+		expect(output).toContain("── Reflections ──");
 		expect(output).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
+		expect(output).toContain("── Observations ──");
 		expect(output).toContain("[aaaaaaaaaaaa]");
 		expect(output).not.toContain("bbbbbbbbbbbb");
+		expectNoDiagnostics(output);
 	});
 
-	it("full view folds V3 ledger truth and ignores old V2 memory", async () => {
-		const obsA = observation("aaaaaaaaaaaa");
-		const obsB = observation("bbbbbbbbbbbb");
+	it("full view folds recorded V3 memory and excludes dropped observations", async () => {
+		const obsA = observation("aaaaaaaaaaaa", { content: "Dropped observation content" });
+		const obsB = observation("bbbbbbbbbbbb", { content: "Kept observation content" });
 		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"]);
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
@@ -79,15 +98,32 @@ describe("V3 /om-view", () => {
 
 		const output = await setup(entries).run(["full"]);
 
-		expect(output).toContain("Memory view: full");
+		expect(output).toContain("── Reflections ──");
 		expect(output).toContain("[eeeeeeeeeeee] Reflection eeeeeeeeeeee");
+		expect(output).toContain("── Observations ──");
 		expect(output).toContain("[bbbbbbbbbbbb]");
+		expect(output).toContain("Kept observation content");
 		expect(output).not.toContain("[aaaaaaaaaaaa]");
+		expect(output).not.toContain("Dropped observation content");
 		expect(output).not.toContain("v2-obs");
 		expect(output).not.toContain("observational-memory");
+		expectNoDiagnostics(output);
 	});
 
-	it("diff view renders visible/full drift", async () => {
+	it("full view renders recorded empty states when ledger has no active memory", async () => {
+		const output = await setup([]).run(["full"]);
+
+		expect(output).toBe([
+			"── Reflections ──",
+			"No recorded reflections.",
+			"",
+			"── Observations ──",
+			"No recorded observations.",
+		].join("\n"));
+		expectNoDiagnostics(output);
+	});
+
+	it("diff view directs diagnostics to /om-status instead of rendering diff lists", async () => {
 		const obsA = observation("aaaaaaaaaaaa");
 		const obsB = observation("bbbbbbbbbbbb");
 		const ref = reflection("eeeeeeeeeeee", ["bbbbbbbbbbbb"]);
@@ -100,11 +136,10 @@ describe("V3 /om-view", () => {
 
 		const output = await setup(entries).run(["diff"]);
 
-		expect(output).toContain("Memory diff: visible vs full");
-		expect(output).toContain("+1 observations, +1 reflections");
-		expect(output).toContain("── Observations only in full (1) ──");
-		expect(output).toContain("[bbbbbbbbbbbb]");
-		expect(output).toContain("── Reflections only in full (1) ──");
-		expect(output).toContain("[eeeeeeeeeeee]");
+		expect(output).toBe("Use /om-status to see recorded-vs-visible drift.");
+		expect(output).not.toContain("Observations only in full");
+		expect(output).not.toContain("Reflections only in full");
+		expect(output).not.toContain("[bbbbbbbbbbbb]");
+		expect(output).not.toContain("[eeeeeeeeeeee]");
 	});
 });
